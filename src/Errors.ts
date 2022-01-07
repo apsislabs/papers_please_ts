@@ -1,0 +1,9 @@
+export class PapersPleaseError extends Error {}
+export class AccessDeniedError extends PapersPleaseError {}
+export class InvalidGrantError extends PapersPleaseError {}
+export class MissingRoleError extends PapersPleaseError {}
+export class DuplicateRoleError extends PapersPleaseError {}
+export class DuplicatePermissionError extends PapersPleaseError {}
+export class InvalidPermissionError extends PapersPleaseError {}
+export class DuplicateScopeError extends PapersPleaseError {}
+export class InvalidScopeError extends PapersPleaseError {}
