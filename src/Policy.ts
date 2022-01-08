@@ -2,8 +2,8 @@ import { asArray } from "./asArray";
 import { AccessDeniedError, DuplicateRoleError, MissingRoleError } from "./Errors";
 import { Role } from "./Role";
 
-export class Policy<UserType> {
-  roles: Map<string, Role<UserType>> = new Map();
+export class Policy<UserType, RoleType, ActionType extends string, SubjectType extends string> {
+  roles: Map<string, Role<UserType, ActionType, SubjectType>> = new Map();
 
   //
   // Add a role to this Policy.
@@ -18,12 +18,12 @@ export class Policy<UserType> {
   // that Permission check --- and will not fall through
   // to subsequent matchiing Roles.
   //
-  addRole(name: string, predicate?: (u: UserType) => boolean): Role<UserType> {
+  addRole(name: string, predicate?: (u: UserType) => boolean): Role<UserType, ActionType, SubjectType> {
     if (this.roles.has(name)) {
       throw new DuplicateRoleError(`Role ${name} has already been defined`);
     }
 
-    const role = new Role<UserType>();
+    const role = new Role<UserType, ActionType, SubjectType>();
 
     role.predicate = predicate ? predicate : () => true;
     this.roles.set(name, role);
@@ -31,8 +31,9 @@ export class Policy<UserType> {
     return role;
   }
 
-  permit(name: string | string[], callback: (role: Role<UserType>) => void) {
+  permit(name: string | string[], callback: (role: Role<UserType, ActionType, SubjectType>) => void) {
     const nameArray = asArray<string>(name);
+
     for (const roleName of nameArray) {
       if (this.roles.has(roleName)) {
         const role = this.roles.get(roleName);
@@ -46,37 +47,38 @@ export class Policy<UserType> {
     }
   }
 
-  can(user: UserType, action: string, subject: any): boolean {
+  can(user: UserType, action: ActionType, subjectType: SubjectType, subject?: any): boolean {
     const rolesToCheck = this._applicableRoles(user);
 
     for (const role of rolesToCheck) {
-      const permission = role.findPermission(action, subject);
+      const permission = role.findPermission(action, subjectType);
+
       if (!permission) continue;
 
       // TODO: Proxy Permission Grants
-      return permission.isGranted(user, subject, action);
+      return permission.isGranted(user, action, subjectType, subject);
     }
 
     return false;
   }
 
-  cannot(user: UserType, action: string, subject: any): boolean {
-    return !this.can(user, action, subject);
+  cannot(user: UserType, action: ActionType, subjectType: SubjectType, subject: any): boolean {
+    return !this.can(user, action, subjectType, subject);
   }
 
-  authorize(user: UserType, action: string, subject: any): void {
-    if (this.cannot(user, action, subject)) {
+  authorize(user: UserType, action: ActionType, subjectType: SubjectType, subject: SubjectType): void {
+    if (this.cannot(user, action, subjectType, subject)) {
       throw new AccessDeniedError(
         `${action} is not permitted on ${subject} for ${user}`
       );
     }
   }
 
-  queryFor(user: UserType, action: string, subject: any): any[] | null {
+  queryFor(user: UserType, action: ActionType, subjectType: SubjectType): any[] | null {
     const rolesToCheck = this._applicableRoles(user);
 
     for (const role of rolesToCheck) {
-      const permission = role.findPermission(action, subject);
+      const permission = role.findPermission(action, subjectType);
       if (!permission) continue;
 
       return permission.fetch(user);
@@ -85,7 +87,7 @@ export class Policy<UserType> {
     return null;
   }
 
-  _applicableRoles(user: UserType): Role<UserType>[] {
+  _applicableRoles(user: UserType): Role<UserType, ActionType, SubjectType>[] {
     return Array.from(this.roles.values()).filter((role) =>
       role.appliesTo(user)
     );
