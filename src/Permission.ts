@@ -1,44 +1,39 @@
 export type PermissionPredicate<
   UserType,
-  ObjectType,
-  ActionType extends string,
-  SubjectType extends string
+  ActionType,
+  SubjectKeyType,
+  SubjectType
 > = (
   u: UserType,
-  subject?: ObjectType,
-  subjectType?: SubjectType,
+  subject?: SubjectType,
+  subjectType?: SubjectKeyType,
   action?: ActionType,
-  permission?: Permission<UserType, ObjectType, ActionType, SubjectType>
+  permission?: Permission<UserType, ActionType, SubjectKeyType, SubjectType>
 ) => boolean;
 
-export type PermissionQuery<UserType, ObjectType> = (
+export type PermissionQuery<UserType, SubjectType> = (
   u: UserType
-) => ObjectType[];
+) => SubjectType[];
 
-export class Permission<
-  UserType,
-  ObjectType,
-  ActionType extends string,
-  SubjectType extends string
-> {
+export class Permission<UserType, ActionType, SubjectKeyType, SubjectType> {
   action: ActionType;
-  subjectType: SubjectType | null = null;
-  query?: PermissionQuery<UserType, ObjectType>;
+  subjectType: SubjectKeyType | null = null;
+  query?: PermissionQuery<UserType, SubjectType>;
   predicate?: PermissionPredicate<
     UserType,
-    ObjectType,
     ActionType,
+    SubjectKeyType,
     SubjectType
   >;
 
   constructor(
     action: ActionType,
-    subjectType: SubjectType,
-    query?: PermissionQuery<UserType, ObjectType>,
+    subjectType: SubjectKeyType,
+    query?: PermissionQuery<UserType, SubjectType>,
     predicate?: PermissionPredicate<
       UserType,
-      ObjectType,
       ActionType,
+      SubjectKeyType,
       SubjectType
     >
   ) {
@@ -48,7 +43,10 @@ export class Permission<
     this.predicate = predicate;
   }
 
-  matches(action: ActionType, subjectType: SubjectType): boolean {
+  matches(
+    action: ActionType,
+    subjectType: SubjectKeyType
+  ): boolean {
     const matchesAction = action === this.action;
     const matchesSubject = subjectType === this.subjectType;
 
@@ -58,8 +56,8 @@ export class Permission<
   isGranted(
     u: UserType,
     action: ActionType,
-    subjectType: SubjectType,
-    subject?: ObjectType
+    subjectType: SubjectKeyType,
+    subject?: SubjectType
   ): boolean {
     if (this.predicate) {
       return this.predicate(u, subject, subjectType, action, this);

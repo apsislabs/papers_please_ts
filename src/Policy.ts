@@ -1,9 +1,18 @@
 import { asArray } from "./asArray";
-import { AccessDeniedError, DuplicateRoleError, MissingRoleError } from "./Errors";
+import {
+  AccessDeniedError,
+  DuplicateRoleError,
+  MissingRoleError,
+} from "./Errors";
 import { Role } from "./Role";
 
-export class Policy<UserType, RoleType, ActionType extends string, SubjectType extends string> {
-  roles: Map<string, Role<UserType, ActionType, SubjectType>> = new Map();
+export class Policy<
+  UserType,
+  RoleType,
+  ActionType,
+  SubjectType
+> {
+  roles: Map<RoleType, Role<UserType, ActionType, SubjectType>> = new Map();
 
   //
   // Add a role to this Policy.
@@ -18,7 +27,10 @@ export class Policy<UserType, RoleType, ActionType extends string, SubjectType e
   // that Permission check --- and will not fall through
   // to subsequent matchiing Roles.
   //
-  addRole(name: string, predicate?: (u: UserType) => boolean): Role<UserType, ActionType, SubjectType> {
+  addRole(
+    name: RoleType,
+    predicate?: (u: UserType) => boolean
+  ): Role<UserType, ActionType, SubjectType> {
     if (this.roles.has(name)) {
       throw new DuplicateRoleError(`Role ${name} has already been defined`);
     }
@@ -31,8 +43,11 @@ export class Policy<UserType, RoleType, ActionType extends string, SubjectType e
     return role;
   }
 
-  permit(name: string | string[], callback: (role: Role<UserType, ActionType, SubjectType>) => void) {
-    const nameArray = asArray<string>(name);
+  permit(
+    name: RoleType | RoleType[],
+    callback: (role: Role<UserType, ActionType, SubjectType>) => void
+  ) {
+    const nameArray = asArray<RoleType>(name);
 
     for (const roleName of nameArray) {
       if (this.roles.has(roleName)) {
@@ -47,7 +62,12 @@ export class Policy<UserType, RoleType, ActionType extends string, SubjectType e
     }
   }
 
-  can(user: UserType, action: ActionType, subjectType: SubjectType, subject?: any): boolean {
+  can<K extends keyof SubjectType>(
+    user: UserType,
+    action: ActionType,
+    subjectType: K,
+    subject?: SubjectType[K]
+  ): boolean {
     const rolesToCheck = this._applicableRoles(user);
 
     for (const role of rolesToCheck) {
@@ -62,11 +82,21 @@ export class Policy<UserType, RoleType, ActionType extends string, SubjectType e
     return false;
   }
 
-  cannot(user: UserType, action: ActionType, subjectType: SubjectType, subject: any): boolean {
+  cannot<K extends keyof SubjectType>(
+    user: UserType,
+    action: ActionType,
+    subjectType: K,
+    subject: SubjectType[K]
+  ): boolean {
     return !this.can(user, action, subjectType, subject);
   }
 
-  authorize(user: UserType, action: ActionType, subjectType: SubjectType, subject: SubjectType): void {
+  authorize<K extends keyof SubjectType>(
+    user: UserType,
+    action: ActionType,
+    subjectType: K,
+    subject: SubjectType[K]
+  ): void {
     if (this.cannot(user, action, subjectType, subject)) {
       throw new AccessDeniedError(
         `${action} is not permitted on ${subject} for ${user}`
@@ -74,7 +104,11 @@ export class Policy<UserType, RoleType, ActionType extends string, SubjectType e
     }
   }
 
-  queryFor(user: UserType, action: ActionType, subjectType: SubjectType): any[] | null {
+  queryFor<K extends keyof SubjectType>(
+    user: UserType,
+    action: ActionType,
+    subjectType: keyof SubjectType
+  ): SubjectType[K][] | null {
     const rolesToCheck = this._applicableRoles(user);
 
     for (const role of rolesToCheck) {

@@ -27,8 +27,10 @@ class User {
   isAdmin: boolean = false;
   isMember: boolean = false;
 
+  _posts: Post[];
+
   posts(): Post[] {
-    return [new Post(this), new Post(this, true)];
+    return this._posts;
   }
 
   constructor(role: "super" | "admin" | "member" | "guest") {
@@ -39,12 +41,17 @@ class User {
     } else if (role === "member") {
       this.isMember = true;
     }
+
+    this._posts = [new Post(this), new Post(this, true)];
   }
 }
 
-type RolesDef = 'super' | 'admin' | 'member' | 'gues';
-type ActionsDef = 'archive';
-type SubjectsDef = 'user' | 'post';
+type RolesDef = "super" | "admin" | "member" | "guest";
+type ActionsDef = "archive";
+type SubjectsDef = {
+  user: User;
+  post: Post;
+};
 
 const ap = createPolicy<User, RolesDef, ActionsDef, SubjectsDef>();
 
@@ -55,12 +62,10 @@ const guestRole = ap.addRole("guest");
 
 // Super Permissions
 superRole.grant("crud", "user");
-superRole.grant("crud", "post");
-superRole.grant("archive", "post");
+superRole.grant(["crud", "archive"], "post");
 
 // Admin Permissions
-adminRole.grant("crud", "post");
-adminRole.grant("archive", "post");
+adminRole.grant(["crud", "archive"], "post");
 adminRole.grant<User>("read", "user", {
   predicate: (u, subject) => u === subject,
 });
@@ -70,11 +75,17 @@ memberRole.grant<User>("read", "user", {
   predicate: (u, subject) => u === subject,
 });
 
-memberRole.grant("create", "post");
+// memberRole.grant("create", "post");
 memberRole.grant<Post>("read", "post", {
-  predicate: (u, post) => Boolean(post && (post.author === u || !post.isArchived)),
+  predicate: (u, post) =>
+    Boolean(post && (post.author === u || !post.isArchived)),
 });
-memberRole.grant<Post>("update", "post", { query: (u) => u.posts() });
+
+memberRole.grant<Post>("update", "post", {
+  query: (u) => {
+    return u.posts();
+  },
+});
 
 memberRole.grant<Post>("archive", "post", {
   query: (u) => u.posts().filter((p) => !p.isArchived),
@@ -99,7 +110,7 @@ describe("User Permissions", () => {
   });
 
   test("sets read permissions as expected", () => {
-    expect(ap.can(superUser, "read", "user", superUser)).toBe(true);
+    expect(ap.can(superUser, "read", "user", adminUser)).toBe(true);
     expect(ap.can(superUser, "read", "user", adminUser)).toBe(true);
     expect(ap.can(superUser, "read", "user", memberUser)).toBe(true);
     expect(ap.can(superUser, "read", "user", guestUser)).toBe(true);
@@ -165,50 +176,229 @@ describe("User Permissions", () => {
   });
 });
 
-// describe("Post Permissions", () => {
-//   test("sets create permissions as expected", () => {
-//     expect(ap.can(superUser, "create", "post")).toBe(true);
-//     expect(ap.can(adminUser, "create", "post")).toBe(true);
-//     expect(ap.can(memberUser, "create", "post")).toBe(true);
-//     expect(ap.can(guestUser, "create", "post")).toBe(false);
-//   });
+describe("Post Permissions", () => {
+  test("sets create permissions as expected", () => {
+    expect(ap.can(superUser, "create", "post")).toBe(true);
+  });
 
-//   test("sets read permissions as expected", () => {
-//     const [suPost, suArchivedPost] = superUser.posts();
-//     const [auPost, auArchivedPost] = adminUser.posts();
-//     const [muPost, muArchivedPost] = memberUser.posts();
+  test("sets read permissions as expected", () => {
+    const [suPost, suArchivedPost] = superUser.posts();
+    const [auPost, auArchivedPost] = adminUser.posts();
+    const [muPost, muArchivedPost] = memberUser.posts();
 
-//     // A super user can read any post
-//     expect(ap.can(superUser, "read", suPost)).toBe(true);
-//     expect(ap.can(superUser, "read", auPost)).toBe(true);
-//     expect(ap.can(superUser, "read", muPost)).toBe(true);
-//     expect(ap.can(superUser, "read", suArchivedPost)).toBe(true);
-//     expect(ap.can(superUser, "read", auArchivedPost)).toBe(true);
-//     expect(ap.can(superUser, "read", muArchivedPost)).toBe(true);
+    // A super user can read any post
+    expect(ap.can<"post">(superUser, "read", "post", suPost)).toBe(true);
+    expect(ap.can<"post">(superUser, "read", "post", auPost)).toBe(true);
+    expect(ap.can<"post">(superUser, "read", "post", muPost)).toBe(true);
+    expect(ap.can<"post">(superUser, "read", "post", suArchivedPost)).toBe(
+      true
+    );
+    expect(ap.can<"post">(superUser, "read", "post", auArchivedPost)).toBe(
+      true
+    );
+    expect(ap.can<"post">(superUser, "read", "post", muArchivedPost)).toBe(
+      true
+    );
 
-//     // An admin user can read any post
-//     expect(ap.can(adminUser, "read", suPost)).toBe(true);
-//     expect(ap.can(adminUser, "read", auPost)).toBe(true);
-//     expect(ap.can(adminUser, "read", muPost)).toBe(true);
-//     expect(ap.can(adminUser, "read", suArchivedPost)).toBe(true);
-//     expect(ap.can(adminUser, "read", auArchivedPost)).toBe(true);
-//     expect(ap.can(adminUser, "read", muArchivedPost)).toBe(true);
+    // An admin user can read any post
+    expect(ap.can<"post">(adminUser, "read", "post", suPost)).toBe(true);
+    expect(ap.can<"post">(adminUser, "read", "post", auPost)).toBe(true);
+    expect(ap.can<"post">(adminUser, "read", "post", muPost)).toBe(true);
+    expect(ap.can<"post">(adminUser, "read", "post", suArchivedPost)).toBe(
+      true
+    );
+    expect(ap.can<"post">(adminUser, "read", "post", auArchivedPost)).toBe(
+      true
+    );
+    expect(ap.can<"post">(adminUser, "read", "post", muArchivedPost)).toBe(
+      true
+    );
 
-//     // A member can read any post that isn't archived,
-//     // and also their own archived posts.
-//     expect(ap.can(memberUser, "read", suPost)).toBe(true);
-//     expect(ap.can(memberUser, "read", auPost)).toBe(true);
-//     expect(ap.can(memberUser, "read", muPost)).toBe(true);
-//     expect(ap.can(memberUser, "read", suArchivedPost)).toBe(false);
-//     expect(ap.can(memberUser, "read", auArchivedPost)).toBe(false);
-//     expect(ap.can(memberUser, "read", muArchivedPost)).toBe(true);
+    // A member can read any post that isn't archived,
+    // and also their own archived posts.
+    expect(ap.can(memberUser, "read", "post", suPost)).toBe(true);
+    expect(ap.can(memberUser, "read", "post", auPost)).toBe(true);
+    expect(ap.can(memberUser, "read", "post", muPost)).toBe(true);
+    expect(ap.can(memberUser, "read", "post", suArchivedPost)).toBe(false);
+    expect(ap.can(memberUser, "read", "post", auArchivedPost)).toBe(false);
+    expect(ap.can(memberUser, "read", "post", muArchivedPost)).toBe(true);
 
-//     // A guest user can read any unarchived post
-//     expect(ap.can(guestUser, "read", suPost)).toBe(true);
-//     expect(ap.can(guestUser, "read", auPost)).toBe(true);
-//     expect(ap.can(guestUser, "read", muPost)).toBe(true);
-//     expect(ap.can(guestUser, "read", suArchivedPost)).toBe(false);
-//     expect(ap.can(guestUser, "read", auArchivedPost)).toBe(false);
-//     expect(ap.can(guestUser, "read", muArchivedPost)).toBe(false);
-//   });
-// });
+    // A guest user can read any unarchived post
+    expect(ap.can(guestUser, "read", "post", suPost)).toBe(true);
+    expect(ap.can(guestUser, "read", "post", auPost)).toBe(true);
+    expect(ap.can(guestUser, "read", "post", muPost)).toBe(true);
+    expect(ap.can(guestUser, "read", "post", suArchivedPost)).toBe(false);
+    expect(ap.can(guestUser, "read", "post", auArchivedPost)).toBe(false);
+    expect(ap.can(guestUser, "read", "post", muArchivedPost)).toBe(false);
+  });
+
+  test("sets update permissions as expected", () => {
+    const [suPost, suArchivedPost] = superUser.posts();
+    const [auPost, auArchivedPost] = adminUser.posts();
+    const [muPost, muArchivedPost] = memberUser.posts();
+
+    // A super user can update any post
+    expect(ap.can<"post">(superUser, "update", "post", suPost)).toBe(true);
+    expect(ap.can<"post">(superUser, "update", "post", auPost)).toBe(true);
+    expect(ap.can<"post">(superUser, "update", "post", muPost)).toBe(true);
+    expect(ap.can<"post">(superUser, "update", "post", suArchivedPost)).toBe(
+      true
+    );
+    expect(ap.can<"post">(superUser, "update", "post", auArchivedPost)).toBe(
+      true
+    );
+    expect(ap.can<"post">(superUser, "update", "post", muArchivedPost)).toBe(
+      true
+    );
+
+    // An admin user can update any post
+    expect(ap.can<"post">(adminUser, "update", "post", suPost)).toBe(true);
+    expect(ap.can<"post">(adminUser, "update", "post", auPost)).toBe(true);
+    expect(ap.can<"post">(adminUser, "update", "post", muPost)).toBe(true);
+    expect(ap.can<"post">(adminUser, "update", "post", suArchivedPost)).toBe(
+      true
+    );
+    expect(ap.can<"post">(adminUser, "update", "post", auArchivedPost)).toBe(
+      true
+    );
+    expect(ap.can<"post">(adminUser, "update", "post", muArchivedPost)).toBe(
+      true
+    );
+
+    // A member can update their own posts
+    expect(ap.can<"post">(memberUser, "update", "post", suPost)).toBe(false);
+    expect(ap.can<"post">(memberUser, "update", "post", auPost)).toBe(false);
+    expect(ap.can<"post">(memberUser, "update", "post", muPost)).toBe(true);
+    expect(ap.can<"post">(memberUser, "update", "post", suArchivedPost)).toBe(
+      false
+    );
+    expect(ap.can<"post">(memberUser, "update", "post", auArchivedPost)).toBe(
+      false
+    );
+    expect(ap.can<"post">(memberUser, "update", "post", muArchivedPost)).toBe(
+      true
+    );
+
+    // A guest user cannot update any posts
+    expect(ap.can(guestUser, "update", "post", suPost)).toBe(false);
+    expect(ap.can(guestUser, "update", "post", auPost)).toBe(false);
+    expect(ap.can(guestUser, "update", "post", muPost)).toBe(false);
+    expect(ap.can(guestUser, "update", "post", suArchivedPost)).toBe(false);
+    expect(ap.can(guestUser, "update", "post", auArchivedPost)).toBe(false);
+    expect(ap.can(guestUser, "update", "post", muArchivedPost)).toBe(false);
+  });
+
+  test("sets delete permissions as expected", () => {
+    const [suPost, suArchivedPost] = superUser.posts();
+    const [auPost, auArchivedPost] = adminUser.posts();
+    const [muPost, muArchivedPost] = memberUser.posts();
+
+    // A super user can delete any post
+    expect(ap.can<"post">(superUser, "delete", "post", suPost)).toBe(true);
+    expect(ap.can<"post">(superUser, "delete", "post", auPost)).toBe(true);
+    expect(ap.can<"post">(superUser, "delete", "post", muPost)).toBe(true);
+    expect(ap.can<"post">(superUser, "delete", "post", suArchivedPost)).toBe(
+      true
+    );
+    expect(ap.can<"post">(superUser, "delete", "post", auArchivedPost)).toBe(
+      true
+    );
+    expect(ap.can<"post">(superUser, "delete", "post", muArchivedPost)).toBe(
+      true
+    );
+
+    // An admin user can delete any post
+    expect(ap.can<"post">(adminUser, "delete", "post", suPost)).toBe(true);
+    expect(ap.can<"post">(adminUser, "delete", "post", auPost)).toBe(true);
+    expect(ap.can<"post">(adminUser, "delete", "post", muPost)).toBe(true);
+    expect(ap.can<"post">(adminUser, "delete", "post", suArchivedPost)).toBe(
+      true
+    );
+    expect(ap.can<"post">(adminUser, "delete", "post", auArchivedPost)).toBe(
+      true
+    );
+    expect(ap.can<"post">(adminUser, "delete", "post", muArchivedPost)).toBe(
+      true
+    );
+
+    // A member cannot delete any posts
+    expect(ap.can<"post">(memberUser, "delete", "post", suPost)).toBe(false);
+    expect(ap.can<"post">(memberUser, "delete", "post", auPost)).toBe(false);
+    expect(ap.can<"post">(memberUser, "delete", "post", muPost)).toBe(false);
+    expect(ap.can<"post">(memberUser, "delete", "post", suArchivedPost)).toBe(
+      false
+    );
+    expect(ap.can<"post">(memberUser, "delete", "post", auArchivedPost)).toBe(
+      false
+    );
+    expect(ap.can<"post">(memberUser, "delete", "post", muArchivedPost)).toBe(
+      false
+    );
+
+    // A guest user cannot delete any posts
+    expect(ap.can(guestUser, "delete", "post", suPost)).toBe(false);
+    expect(ap.can(guestUser, "delete", "post", auPost)).toBe(false);
+    expect(ap.can(guestUser, "delete", "post", muPost)).toBe(false);
+    expect(ap.can(guestUser, "delete", "post", suArchivedPost)).toBe(false);
+    expect(ap.can(guestUser, "delete", "post", auArchivedPost)).toBe(false);
+    expect(ap.can(guestUser, "delete", "post", muArchivedPost)).toBe(false);
+  });
+
+  test("sets archive permissions as expected", () => {
+    const [suPost, suArchivedPost] = superUser.posts();
+    const [auPost, auArchivedPost] = adminUser.posts();
+    const [muPost, muArchivedPost] = memberUser.posts();
+
+    // A super user can archive any post
+    expect(ap.can<"post">(superUser, "archive", "post", suPost)).toBe(true);
+    expect(ap.can<"post">(superUser, "archive", "post", auPost)).toBe(true);
+    expect(ap.can<"post">(superUser, "archive", "post", muPost)).toBe(true);
+    expect(ap.can<"post">(superUser, "archive", "post", suArchivedPost)).toBe(
+      true
+    );
+    expect(ap.can<"post">(superUser, "archive", "post", auArchivedPost)).toBe(
+      true
+    );
+    expect(ap.can<"post">(superUser, "archive", "post", muArchivedPost)).toBe(
+      true
+    );
+
+    // An admin user can archive any post
+    expect(ap.can<"post">(adminUser, "archive", "post", suPost)).toBe(true);
+    expect(ap.can<"post">(adminUser, "archive", "post", auPost)).toBe(true);
+    expect(ap.can<"post">(adminUser, "archive", "post", muPost)).toBe(true);
+    expect(ap.can<"post">(adminUser, "archive", "post", suArchivedPost)).toBe(
+      true
+    );
+    expect(ap.can<"post">(adminUser, "archive", "post", auArchivedPost)).toBe(
+      true
+    );
+    expect(ap.can<"post">(adminUser, "archive", "post", muArchivedPost)).toBe(
+      true
+    );
+
+    // A member can archive their own unarchived posts
+    expect(ap.can<"post">(memberUser, "archive", "post", suPost)).toBe(false);
+    expect(ap.can<"post">(memberUser, "archive", "post", auPost)).toBe(false);
+    expect(ap.can<"post">(memberUser, "archive", "post", muPost)).toBe(true);
+
+    // A member cannot archive posts that are already archived
+    expect(ap.can<"post">(memberUser, "archive", "post", suArchivedPost)).toBe(
+      false
+    );
+    expect(ap.can<"post">(memberUser, "archive", "post", auArchivedPost)).toBe(
+      false
+    );
+    expect(ap.can<"post">(memberUser, "archive", "post", muArchivedPost)).toBe(
+      false
+    );
+
+    // A guest user cannot archive any posts
+    expect(ap.can(guestUser, "archive", "post", suPost)).toBe(false);
+    expect(ap.can(guestUser, "archive", "post", auPost)).toBe(false);
+    expect(ap.can(guestUser, "archive", "post", muPost)).toBe(false);
+    expect(ap.can(guestUser, "archive", "post", suArchivedPost)).toBe(false);
+    expect(ap.can(guestUser, "archive", "post", auArchivedPost)).toBe(false);
+    expect(ap.can(guestUser, "archive", "post", muArchivedPost)).toBe(false);
+  });
+});

@@ -4,12 +4,13 @@ import { Permission, PermissionPredicate, PermissionQuery } from "./Permission";
 
 export type RolePredicate<UserType> = (u: UserType) => boolean;
 
-export class Role<
-  UserType,
-  ActionType extends string,
-  SubjectType extends string
-> {
-  permissions: Permission<UserType, any, ActionType, SubjectType>[] = [];
+export class Role<UserType, ActionType, SubjectType> {
+  permissions: Permission<
+    UserType,
+    ActionType,
+    keyof SubjectType,
+    SubjectType[keyof SubjectType]
+  >[] = [];
   predicate?: RolePredicate<UserType>;
 
   appliesTo(user: UserType) {
@@ -20,16 +21,16 @@ export class Role<
     return true;
   }
 
-  grant<ObjectType>(
+  grant<K extends SubjectType[keyof SubjectType]>(
     action: ActionType | ActionType[],
-    subjectType: SubjectType,
+    subjectType: keyof SubjectType,
     params: {
-      query?: PermissionQuery<UserType, ObjectType>;
+      query?: PermissionQuery<UserType, K>;
       predicate?: PermissionPredicate<
         UserType,
-        ObjectType,
         ActionType,
-        SubjectType
+        keyof SubjectType,
+        K
       >;
     } = {}
   ): void {
@@ -49,9 +50,9 @@ export class Role<
       const hasPredicate = Boolean(predicate);
       const permission = new Permission<
         UserType,
-        ObjectType,
         ActionType,
-        SubjectType
+        keyof SubjectType,
+        K
       >(preparedAction, subjectType);
 
       if (hasQuery && hasPredicate) {
@@ -60,7 +61,7 @@ export class Role<
       } else if (hasQuery && !hasPredicate) {
         permission.query = query;
 
-        if (preparedAction === "create") {
+        if (preparedAction === ("create" as unknown as ActionType)) {
           // Create is a magic action which is valid
           // no matter the query, because it's not
           permission.predicate = () => true;
@@ -69,11 +70,10 @@ export class Role<
           // is simply a check for inclusion in the
           // result of calling query.
 
-          // permission.predicate = (u: UserType, subj: ObjectType) => {
-          //   const res = query!!(u) ?? [];
-          //   return res.includes(subj);
-          // };
-          permission.predicate =  () => true;
+          permission.predicate = (u: UserType, subject?: K) => {
+            const res = query!!(u) ?? [];
+            return res.includes(subject!!);
+          };
         }
       } else if (!hasQuery && hasPredicate) {
         // Only a predicate provided
@@ -85,20 +85,37 @@ export class Role<
         permission.predicate = () => true;
       }
 
-      this.permissions.push(permission);
+      this.permissions.push(
+        permission as unknown as Permission<
+          UserType,
+          ActionType,
+          keyof SubjectType,
+          SubjectType[keyof SubjectType]
+        >
+      );
     }
   }
 
   findPermission(
     action: ActionType,
-    subjectType: SubjectType
-  ): Permission<UserType, unknown, ActionType, SubjectType> | undefined {
+    subjectType: keyof SubjectType
+  ):
+    | Permission<
+        UserType,
+        ActionType,
+        keyof SubjectType,
+        SubjectType[keyof SubjectType]
+      >
+    | undefined {
     return this.permissions.find((permission) =>
       permission.matches(action, subjectType)
     );
   }
 
-  permissionExists(action: ActionType, subjectType: SubjectType): boolean {
+  permissionExists(
+    action: ActionType,
+    subjectType: keyof SubjectType
+  ): boolean {
     return Boolean(this.findPermission(action, subjectType));
   }
 
@@ -110,7 +127,7 @@ export class Role<
   }
 
   _expandAction(action: ActionType): ActionType | ActionType[] {
-    if (action === "rest") {
+    if (action === ("rest" as unknown as ActionType)) {
       return [
         "index",
         "new",
@@ -119,9 +136,14 @@ export class Role<
         "edit",
         "update",
         "delete",
-      ] as ActionType[];
-    } else if (action === "crud") {
-      return ["create", "read", "update", "delete"] as ActionType[];
+      ] as unknown[] as ActionType[];
+    } else if (action === ("crud" as unknown as ActionType)) {
+      return [
+        "create",
+        "read",
+        "update",
+        "delete",
+      ] as unknown[] as ActionType[];
     }
 
     return action;
